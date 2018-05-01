@@ -5,3 +5,6 @@ db: /reg/g/pcds/pyps/apps/hutch-python/device_config/db.json
 
 # Hutch-specific imports
 load: xcs.beamline
+
+daq_platform:
+  default: 1
