@@ -3,7 +3,8 @@ from hutch_python.utils import safe_load
 
 with safe_load('Split and Delay'):
     from hxrsnd.sndsystem import SplitAndDelay
-    snd = SplitAndDelay('XCS:SND')
+    from xcs.db import daq, RE
+    snd = SplitAndDelay('XCS:SND', daq=daq, RE=RE)
 
 
 with safe_load('SnD ascan shortcut'):
