@@ -17,8 +17,8 @@ with safe_load('Event Sequencer'):
 
 
 with safe_load('User Opal'):
-    from pcdsdevices.areadetector.detectors import DefaultAreaDetector
-    opal_1 = DefaultAreaDetector('XCS:USR:O1000:01', name='opal_1')
+    from pcdsdevices.areadetector.detectors import PCDSDetector
+    opal_1 = PCDSDetector('XCS:USR:O1000:01', name='opal_1')
 
 
 with safe_load('User Newports'):
