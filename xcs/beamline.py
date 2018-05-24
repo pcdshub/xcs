@@ -4,7 +4,7 @@ from hutch_python.utils import safe_load
 with safe_load('Split and Delay'):
     from hxrsnd.sndsystem import SplitAndDelay
     from xcs.db import daq, RE
-    snd = SplitAndDelay('XCS:SND', daq=daq, RE=RE)
+    snd = SplitAndDelay('XCS:SND', name='snd', daq=daq, RE=RE)
 
 
 with safe_load('SnD ascan shortcut'):
@@ -17,8 +17,8 @@ with safe_load('Event Sequencer'):
 
 
 with safe_load('User Opal'):
-    from pcdsdevices.areadetector.detectors import DefaultAreaDetector
-    opal_1 = DefaultAreaDetector('XCS:USR:O1000:01', name='opal_1')
+    from pcdsdevices.areadetector.detectors import PCDSDetector
+    opal_1 = PCDSDetector('XCS:USR:O1000:01', name='opal_1')
 
 
 with safe_load('User Newports'):
