@@ -1,6 +1,5 @@
 #!/bin/bash
 # Launch hutch-python with all devices
 HERE=`dirname $(readlink -f $0)`
-source "${HERE}/xcsversion"
-pathmunge "${CONDA_BIN}"
+source "${HERE}/xcsenv"
 hutch-python --cfg "${HERE}/conf.yml" $@
