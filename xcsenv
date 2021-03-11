@@ -1,17 +1,27 @@
 #!/bin/bash
 # Source this to load the full environment that hutch python uses
 
-# edit this line only
-export CONDA_ENVNAME="pcds-3.3.3"
+# edit these lines only
+USE_LOCAL="1"
+export CONDA_ENVNAME="pcds-4.0.1"
 #export CONDA_ENVNAME="dev"
-export CONDA_BASE="/reg/g/pcds/pyps/conda/py36"
+
 export HUTCH="xcs"
+export LOCAL_BASE="/u1/xcsopr/conda_envs"
+export NFS_BASE="/reg/g/pcds/pyps/conda/py36"
+
+if [ -n "${USE_LOCAL}" ] && [ -d "${LOCAL_BASE}" ]; then
+  echo "Loading local disk python env ${CONDA_ENVNAME}"
+  source "${LOCAL_BASE}/${CONDA_ENVNAME}/bin/activate"
+else
+  echo "Loading NFS python env ${CONDA_ENVNAME}"
+  source "${NFS_BASE}/etc/profile.d/conda.sh"
+  conda activate "${CONDA_ENVNAME}"
+fi
 
 unset PYTHONPATH
 unset LD_LIBRARY_PATH
 
-source "${CONDA_BASE}/etc/profile.d/conda.sh"
-conda activate "${CONDA_ENVNAME}"
 HERE=`dirname $(readlink -f $BASH_SOURCE)`
 
 if [ -f "${HERE}/../common/dev/hutch-python/bin/hutch-python" ]; then
