@@ -1,0 +1,10 @@
+in:
+  active: true
+  history:
+    10 Oct 2020 19:23:32: '   -1.7500'
+  value: -1.750041
+out:
+  active: true
+  history:
+    10 Oct 2020 19:23:19: '   -2.7500'
+  value: -2.750045

@@ -1,0 +1,15 @@
+in:
+  active: true
+  history:
+    10 Oct 2020 19:24:58: '   -0.0000'
+  value: -1.5000000001208491e-05
+out:
+  active: true
+  history:
+    10 Oct 2020 19:26:19: '   -6.0000'
+  value: -5.999980000000001
+park:
+  active: true
+  history:
+    29 Jul 2020 12:55:59: '   70.0000'
+  value: 70

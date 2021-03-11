@@ -1,0 +1,15 @@
+diode:
+  active: true
+  history:
+    29 Jul 2020 11:52:24: '   -0.0002'
+  value: -0.0001500000000005386
+out:
+  active: true
+  history:
+    29 Jul 2020 11:53:29: '  -20.0003'
+  value: -20.000300000000003
+park:
+  active: true
+  history:
+    29 Jul 2020 12:49:15: '  -80.0000'
+  value: -80

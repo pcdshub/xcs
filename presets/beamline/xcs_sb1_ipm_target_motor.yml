@@ -1,0 +1,10 @@
+mono_ref:
+  active: true
+  history:
+    03 Sep 2020 12:08:12: '   50.5029 automatic preset for ccm beamline shift'
+  value: 50.5029296875
+pink_ref:
+  active: true
+  history:
+    03 Sep 2020 12:08:12: '   43.0029 automatic preset for ccm beamline shift'
+  value: 43.0029296875
