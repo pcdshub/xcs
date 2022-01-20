@@ -1,0 +1,16 @@
+S1:
+  active: true
+  history:
+    26 Jun 2021 10:29:02: '   -5.8500'
+  value: -5.8500000000000005
+S3:
+  active: true
+  history:
+    26 Jun 2021 10:37:29: '   -5.8500'
+    26 Jun 2021 10:38:41: '   -5.8650'
+  value: -5.865
+yag:
+  active: true
+  history:
+    26 Jun 2021 10:21:58: '   -5.6210'
+  value: -5.6209960937500005

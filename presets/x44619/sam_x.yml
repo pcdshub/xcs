@@ -1,0 +1,17 @@
+lee:
+  active: true
+  history:
+    20 Oct 2021 09:48:23: '   39.9000'
+    20 Oct 2021 18:57:28: '   40.8750'
+    20 Oct 2021 20:01:34: '   40.5263'
+  value: 40.526250000000005
+silica:
+  active: true
+  history:
+    14 Oct 2021 17:09:59: '   48.6000'
+  value: 48.599999999999994
+zyla:
+  active: true
+  history:
+    14 Oct 2021 16:33:08: '  169.5850'
+  value: 169.585

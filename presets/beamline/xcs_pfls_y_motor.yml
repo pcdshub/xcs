@@ -1,0 +1,26 @@
+out:
+  active: true
+  history:
+    20 May 2021 10:12:49: '   60.0024'
+  value: 60.00244140625
+pack1:
+  active: true
+  history:
+    07 May 2021 11:24:26: '    1.3013'
+    20 May 2021 10:08:21: '    1.3013'
+  value: 1.30126953125
+pack1_ccm:
+  active: true
+  history:
+    02 Jun 2021 23:01:30: '    9.7046'
+  value: 9.70458984375
+pack2:
+  active: true
+  history:
+    07 May 2021 11:23:41: '   20.3003'
+  value: 20.30029296875
+pack3:
+  active: true
+  history:
+    07 May 2021 11:21:53: '   39.4019'
+  value: 39.40185546875

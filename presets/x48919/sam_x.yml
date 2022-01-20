@@ -1,0 +1,11 @@
+power_meter:
+  active: true
+  history:
+    08 Nov 2021 04:58:14: '   37.1012'
+    08 Nov 2021 05:01:56: '   39.1012'
+  value: 39.10124999999999
+yag:
+  active: true
+  history:
+    08 Nov 2021 04:55:20: '    6.1012'
+  value: 6.101249999999993

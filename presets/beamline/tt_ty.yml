@@ -1,0 +1,35 @@
+Frosted_YAG:
+  active: true
+  history:
+    01 Jul 2021 10:10:40: '   39.9634'
+  value: 39.96337890625
+LuAG:
+  active: true
+  history:
+    08 May 2021 16:27:42: '  -16.1401'
+  value: -16.14013671875
+Si3N4_1um:
+  active: true
+  history:
+    01 Jul 2021 11:23:03: '   -4.1284'
+  value: -4.12841796875
+Si3N4_2um:
+  active: true
+  history:
+    01 Jul 2021 11:22:49: '    5.8911'
+  value: 5.89111328125
+YAG_20um:
+  active: true
+  history:
+    01 Jul 2021 10:12:33: '   28.9429'
+  value: 28.94287109375
+out:
+  active: true
+  history:
+    01 Jul 2021 10:12:54: '   49.9561'
+  value: 49.9560546875
+ref_las:
+  active: true
+  history:
+    01 Jul 2021 10:11:53: '  -28.5278'
+  value: -28.52783203125

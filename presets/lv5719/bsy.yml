@@ -1,0 +1,10 @@
+in:
+  active: true
+  history:
+    15 Dec 2021 00:58:16: '   21.9000'
+  value: 21.899998602
+out:
+  active: true
+  history:
+    15 Dec 2021 00:58:50: '   19.9000'
+  value: 19.9000018008

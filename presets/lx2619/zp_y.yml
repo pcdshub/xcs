@@ -1,0 +1,10 @@
+sample_1:
+  active: true
+  history:
+    18 Oct 2021 14:23:19: '    0.0000'
+  value: 0.0
+sample_2:
+  active: true
+  history:
+    18 Oct 2021 15:14:31: '    0.0400'
+  value: 0.03999999999999915

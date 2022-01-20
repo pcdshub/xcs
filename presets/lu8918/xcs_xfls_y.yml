@@ -1,0 +1,16 @@
+p2:
+  active: true
+  history:
+    03 Apr 2021 23:19:28: '   37.6343'
+    06 Apr 2021 21:03:11: '   37.6050'
+  value: 37.60498046875
+pk1:
+  active: true
+  history:
+    03 Apr 2021 23:39:32: '   10.8350'
+  value: 10.8349609375
+pk3:
+  active: true
+  history:
+    03 Apr 2021 23:46:57: '   64.1553'
+  value: 64.1552734375

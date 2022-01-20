@@ -1,0 +1,22 @@
+pack1:
+  active: true
+  history:
+    20 May 2021 06:47:16: '    0.2636'
+  value: 0.26363281250000015
+pack1_ccm:
+  active: true
+  history:
+    25 Jun 2021 08:50:59: '    0.1807'
+    25 Jun 2021 10:00:41: '    0.2311'
+  value: 0.2310664062500001
+pack2:
+  active: true
+  history:
+    07 May 2021 12:33:49: '    0.0651'
+  value: 0.06513281250000011
+pack3_ccm:
+  active: true
+  history:
+    02 Jun 2021 23:04:46: '    0.3734'
+    06 Jun 2021 22:44:16: '    0.3509'
+  value: 0.35086425781250014

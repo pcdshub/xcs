@@ -1,0 +1,10 @@
+ccm:
+  active: true
+  history:
+    01 Jul 2021 11:40:09: '    7.5001'
+  value: 7.5001
+pink:
+  active: true
+  history:
+    01 Jul 2021 11:39:24: '    0.0002'
+  value: 0.00020000000000002655
