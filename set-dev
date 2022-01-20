@@ -1,24 +1,29 @@
 #!/bin/bash
-MODULE="$1"
-if [ -z "$2" ]; then
-  IMPORT="${MODULE}"
-else
-  IMPORT="$2"
+# Usage: ./set-dev <repo> [package [org]] [--http]
+# Org defaults to 'pcdshub', package defaults to repo name
+# Defaults to ssh remote, use --http if you prefer that
+
+if [ -z "$1" ]; then
+  echo "Usage: ./set-dev <repo> [package [org]]" >&2
+  exit 1
 fi
-if [ -z "$3" ]; then
-  REPO='pcdshub'
-else
-  REPO="$3"
-fi
+
+REPO="$1"
+PACKAGE=${2:-${MODULE}}
+ORG=${3:-"pcdshub"}
 
 HERE=`dirname $(readlink -f $0)`
 mkdir -p "${HERE}/dev/devpath"
 
 pushd "${HERE}/dev"
 
-if [ ! -d "${MODULE}" ]; then
-  git clone "https://github.com/${REPO}/${MODULE}.git"
-  ln -s `readlink -f "${MODULE}/${IMPORT}"` "devpath/${IMPORT}"
+if [ ! -d "${REPO}" ]; then
+  if [[ "$@" =~ "--http" ]]; then
+    git clone "https://github.com/${ORG}/${REPO}.git"
+  else
+    git clone "git@github.com:${ORG}/${REPO}.git"
+  fi
+  ln -s `readlink -f "${REPO}/${PACKAGE}"` "devpath/${PACKAGE}"
 fi
 
 popd
