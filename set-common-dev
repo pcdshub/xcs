@@ -9,7 +9,7 @@ if [ -z "$1" ]; then
 fi
 
 REPO="$1"
-PACKAGE=${2:-${MODULE}}
+PACKAGE=${2:-${REPO}}
 ORG=${3:-"pcdshub"}
 
 HERE=`dirname $(readlink -f $0)`
