@@ -11,6 +11,7 @@ import pcdsdevices.device_types
 from pcdsdevices.inout import InOutPositioner
 from subprocess import check_output
 import time
+from pcdsdevices.analog_signals import Acromag
 
 class LaserShutter(InOutPositioner):
     """Controls shutter controlled by Analog Output"""
@@ -41,59 +42,32 @@ class LaserShutter(InOutPositioner):
 
 
 #TTL I/O Operational Trigger
-class SyringePump:
-    def __init__(self,name,base,ttl,vlow=0,vhigh=5):
-        self.name=name
-        self.base=PV(base)
-        self.ttl=PV(ttl)
-        self.vlow=vlow
-        self.vhigh=vhigh
-        self.delta=0.5
-        self._is_initialized=False
-    def _initialize(self):
-        if not self._is_initialized:
-            self.base.put(self.vhigh)
-            self.ttl.put(self.vlow)
-        self._is_initialized=True	
-    def _uninitialize(self):
-        if self._is_initialized:
-            self.base.put(self.vlow)
-            self.ttl.put(self.vlow)
-        self._is_initialized=False	
+class Syringe_Pump():
+    def __init__(self):
+        self.signals = Acromag('XCS:USR', name='syringe_pump_channels')
+        self.base = self.signals.ao1_0
+        self.ttl = self.signals.ao1_1
     def on(self):
-        if not self._is_initialized:
-            self._initialize()
-        self.ttl.put(self.vhigh)
-        sleep(1)
-        self.ttl.put(self.vlow)
-        sleep(1)
-        self.ttl.put(self.vhigh)
+        ttl = self.ttl.get()
+        self.base.put(5)
+        if ttl == 5:
+            self.ttl.put(0)
+            print('Initialized and on')
+        if ttl == 0:
+            self.ttl.put(5)
+            sleep(1)
+            self.ttl.put(0)
+            print("Syringe pump is on")
     def off(self):
-        if not self._is_initialized:
-            self._initialize()
-        self.ttl.put(self.vhigh)
-        sleep(1)
-        self.ttl.put(self.vlow)
-    def status_string(self):
-        status_string='Syringepump is in unknown state'
-        if not self._is_initialized:
-            status_string='Syringepump is not initialized'
-        else:
-            if abs(self.ttl.get()-self.vhigh)<self.delta:
-                status_string='Syringepump is ON'
-            elif abs(self.ttl.get()-self.vlow)<self.delta:
-                status_string='Syringepump is OFF'
-        return status_string
-    def status(self):
-        print(self.status_string())
-    def __repr__(self):
-        return self.status_string()
-    def test(self):
-        if not self._is_initialized:
-            self._initialize()
-        self.on()
-        sleep(5)
-        self.off()
+        ttl = self.ttl.get()
+        self.base.put(5)
+        if ttl == 0:
+            self.ttl.put(5)
+            sleep(1)
+            self.ttl.put(0)
+            print("Syringe pump is off")
+        if ttl == 5:
+            self.ttl.put(0)
 
 #RS-232 operation
 from telnetlib import Telnet

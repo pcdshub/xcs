@@ -1,3 +1,9 @@
+'220204':
+  active: true
+  history:
+    04 Feb 2022 09:12:35: '   95.5000'
+    04 Feb 2022 09:37:56: '   95.4000'
+  value: 95.4
 all_out:
   active: true
   history:
@@ -8,10 +14,11 @@ bottom_hole:
   history:
     07 May 2021 11:53:43: '  103.2000'
     10 Dec 2021 22:23:45: '   88.0000'
+    14 Feb 2022 23:53:56: '   96.9836'
     15 Oct 2021 17:42:29: '   83.2000'
     20 May 2021 07:17:17: '  103.7000'
     20 May 2021 08:59:01: '  104.7000'
-  value: 88.0
+  value: 96.983647896
 bottom_hole_ccm:
   active: true
   history:

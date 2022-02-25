@@ -18,6 +18,12 @@ Si3N4_2um:
   history:
     01 Jul 2021 11:22:49: '    5.8911'
   value: 5.89111328125
+Ti:
+  active: true
+  history:
+    01 Feb 2022 15:11:49: '    1.3953 Initial add of Ti preset'
+    01 Feb 2022 15:13:40: '  -30.5078 Fix Ti preset'
+  value: -30.5078125
 YAG_20um:
   active: true
   history:

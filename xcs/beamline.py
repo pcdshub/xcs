@@ -274,6 +274,7 @@ with safe_load('Create Aliases'):
     from xcs.db import xcs_txt as txt
     from xcs.db import xcs_lxt_fast as lxt_fast
 
+    from xcs.db import xcs_lodcm as lom
     from xcs.db import xcs_ccm as ccm
     #from xcs.db import xcs_xfls as crl2
     from xcs.db import xcs_pfls as crl1
@@ -305,10 +306,15 @@ with safe_load('Pink/Mono Offset'):
         lib_y: 'default'
     }
 
-with safe_load('Syringe Pump'):
+#with safe_load('Syringe Pump'):
+#    #from xcs.syringepump import SyringePump
+#    from xcs.devices import SyringePump
+#    syringepump=SyringePump('solvent_topup',"XCS:USR:ao1:0","XCS:USR:ao1:1")
+
+with safe_load('Syringe_Pump'):
     #from xcs.syringepump import SyringePump
-    from xcs.devices import SyringePump
-    syringepump=SyringePump('solvent_topup',"XCS:USR:ao1:0","XCS:USR:ao1:1")
+    from xcs.devices import Syringe_Pump
+    syringe_pump=Syringe_Pump()
 
 with safe_load('import macros'):
     from xcs.macros import *
@@ -324,10 +330,34 @@ with safe_load('pyami detectors'):
 with safe_load('bluesky setup'):
     from bluesky.callbacks.mpl_plotting import initialize_qt_teleporter
     initialize_qt_teleporter()
+
 with safe_load('ladm_det'):
     xcsdet_y = IMS('XCS:LAM:MMS:07',name = 'xcsdet_y')
     xcsdet_x = IMS('XCS:LAM:MMS:06',name = 'xcsdet_x')
 
+with safe_load('LADM'):
+    from pcdsdevices.ladm import LADM, LADMMotors, Beamstops
+    from pcdsdevices.positioner import FuncPositioner
+    lm = LADMMotors('XCS:LAM', name='ladm_motors')
+    bs = Beamstops('XCS:LAM', name='ladm_beamstops')
+    theta_pv = EpicsSignal('XCS:VARS:LAM:Theta', name = 'LADM_theta')
+    gamma_pv = EpicsSignal('XCS:VARS:LAM:Gamma', name='LADM_gamma')     
+    ladm = LADM(
+                lm.x1_us,
+                lm.y1_us,
+                lm.x2_ds, 
+                lm.y2_ds,
+                lm.z_us,
+                theta_pv, gamma_pv
+               )
+    ladmTheta = FuncPositioner(name='ladmTheta',move=ladm.moveTheta,get_pos=ladm.wmTheta,set_pos=ladm.setTheta)
+    ladm.theta = ladmTheta
+    ladmXT = FuncPositioner(name='ladmXT',move=ladm.moveX, get_pos=ladm.wmX, set_pos=ladm._setX, egu='mm', limits=(ladm._get_lowlimX, ladm._get_hilimX))
+    ladm.XT = ladmXT
+    
+    #ladm.__lowlimX=ladm._set_lowlim(-10)
+    #ladm.__hilimX=ladm._set_hilim(2000)
+    
 with safe_load('drift monitor'):
    import numpy as np
    import json
@@ -364,7 +394,8 @@ with safe_load('drift monitor'):
                #ipm2val = float((ttdata.split(" "))[5])
                #ttfwhm = float((ttdata.split(" "))[7])
                if(dlen%10 == 0):
-                  print("tt_value",current_tt,"ttamp",ttamp,"ipm4",ipm4val)
+                  #print("tt_value",current_tt,"ttamp",ttamp,"ipm4",ipm4val)
+                  print("tt_value:%0.3f" %current_tt + "   ttamp:%0.3f " %ttamp +"   ipm4:%d" %ipm4val)
                if (ttamp > ttamp_th)and(ipm4val > ipm4_th)and(ttfwhm < 130)and(ttfwhm >  30)and(current_tt != tenshots_tt[-1,]):# for filtering the last one is for when DAQ is stopping
                   tenshots_tt = np.insert(tenshots_tt,dlen,current_tt)
                   dlen = np.shape(tenshots_tt)[0]
@@ -480,3 +511,38 @@ with safe_load('drift monitor'):
                      print('\033[1m'+"Switch to binary search"+'\033[0m')
                      break
                   prebs = bs#the correlation change?
+
+
+with safe_load('gige hdf5 beta'):
+    from pcdsdevices.areadetector.detectors import PCDSHDF5BlueskyTriggerable
+    xcs_gige_lj1_hdf5 = PCDSHDF5BlueskyTriggerable(
+        'XCS:GIGE:LJ1:',
+        name='xcs_gige_lj1_hdf5',
+        write_path='/cds/data/iocData/ioc-xcs-gige-lj1',
+    )
+
+def snd_park():
+    with safe_load('Split and Delay'):
+        from hxrsnd.sndsystem import SplitAndDelay
+        from xcs.db import daq, RE
+    snd = SplitAndDelay('XCS:SND', name='snd', daq=daq, RE=RE)
+    snd.t1.L.mv(250,wait = True)
+    snd.t4.L.mv(250,wait = True)
+
+    snd.dd.x.mv(-270,wait = False)
+    snd.di.x.mv(-90,wait = False)
+    snd.do.x.mv(-100,wait = False)
+    snd.dci.x.mv(70,wait = False)
+    snd.dco.x.mv(70,wait = False)
+    snd.dcc.x.mv(120,wait = False)
+
+    snd.t1.tth.mv(0,wait = True)
+    snd.t4.tth.mv(0,wait = True)
+
+    snd.t2.x.mv(70,wait = False)
+
+    snd.t1.x.mv(90)
+    snd.t4.x.mv(90)
+
+    snd.t3.x.mv(70)
+    return True

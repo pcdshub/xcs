@@ -7,6 +7,7 @@ import time
 import os
 
 import numpy as np
+import elog
 from hutch_python.utils import safe_load
 from ophyd import EpicsSignalRO
 from ophyd import EpicsSignal
@@ -22,33 +23,66 @@ from xcs.db import camviewer
 from xcs.db import RE
 from xcs.db import xcs_ccm as ccm
 from xcs.delay_scan import delay_scan
-from xcs.db import lxt_fast
+from xcs.db import lxt_fast, lxt_fast_enc
 from pcdsdevices.device_types import Newport, IMS
-
+from pcdsdevices.evr import Trigger
 #from macros import *
 import time
 
 logger = logging.getLogger(__name__)
+ 
 
 class User():
     def __init__(self):
-        pass
-        with safe_load('x533_motors'):
-            self.th=IMS('STEP:XRT1:442:MOTR',name='th')
-            self.tth=IMS('STEP:XRT1:443:MOTR',name='tth')
-            self.xtal_y=IMS('STEP:XRT1:441:MOTR',name='xtal_y')
-            self.cam_dis=IMS('STEP:XRT1:444:MOTR',name='cam_dis')
-            self.cam_y=IMS('STEP:XRT1:447:MOTR',name='cam_y')
-            self.iris=IMS('STEP:XRT1:445:MOTR',name='irs')
-    
 
-    def takeRun(self, nEvents, record=None, use_l3t=False):
+        with safe_load ('VH_motors'):
+            self.vh_y = IMS('XCS:USR:MMS:15', name='vh_y')
+            self.vh_x = IMS('XCS:USR:MMS:16', name='vh_x')
+            self.vh_rot = IMS('XCS:USR:MMS:39', name='vh_rot')
+
+        with safe_load ('LED'):
+            self.led = Trigger('XCS:R42:EVR:01:TRIG9', name='led_delay')
+            self.led_uS = MicroToNano()
+
+#        with safe_load('Laser Phase Motor'):
+#            from ophyd.epics_motor import EpicsMotor
+#            self.las_phase = EpicsMotor('LAS:FS4:MMS:PH', name='las_phase')
+
+    def set_current_position(self, motor, value):
+        motor.set_use_switch.put(1)
+        motor.set_use_switch.wait_for_connection()
+        motor.user_setpoint.put(value, force=True)
+        motor.user_setpoint.wait_for_connection()
+        motor.set_use_switch.put(0)
+
+    def lxt_fast_set_absolute_zero(self):
+        currentpos = lxt_fast()
+        currentenc = lxt_fast_enc.get()
+        #elog.post('Set current stage position {}, encoder value {} to 0'.format(currentpos,currentenc.pos))
+        print('Set current stage position {}, encoder value {} to 0'.format(currentpos,currentenc.pos))
+        lxt_fast.set_current_position(0)
+        lxt_fast_enc.set_zero()
+        return
+
+    def takeRun(self, nEvents, record=True, use_l3t=False):
         daq.configure(events=120, record=record, use_l3t=use_l3t)
         daq.begin(events=nEvents)
         daq.wait()
         daq.end_run()
 
-    def ascan(self, motor, start, end, nsteps, nEvents, record=None, use_l3t=False):
+    def pvascan(self, motor, start, end, nsteps, nEvents, record=None):
+        currPos = motor.get()
+        daq.configure(nEvents, record=record, controls=[motor])
+        RE(scan([daq], motor, start, end, nsteps))
+        motor.put(currPos)
+
+    def pvdscan(self, motor, start, end, nsteps, nEvents, record=None):
+        daq.configure(nEvents, record=record, controls=[motor])
+        currPos = motor.get()
+        RE(scan([daq], motor, currPos + start, currPos + end, nsteps))
+        motor.put(currPos)
+
+    def ascan(self, motor, start, end, nsteps, nEvents, record=True, use_l3t=False):
         self.cleanup_RE()
         currPos = motor.wm()
         daq.configure(nEvents, record=record, controls=[motor], use_l3t=use_l3t)
@@ -60,7 +94,7 @@ class User():
             self.cleanup_RE()
         motor.mv(currPos)
 
-    def listscan(self, motor, posList, nEvents, record=None, use_l3t=False):
+    def listscan(self, motor, posList, nEvents, record=True, use_l3t=False):
         self.cleanup_RE()
         currPos = motor.wm()
         daq.configure(nEvents, record=record, controls=[motor], use_l3t=use_l3t)
@@ -72,23 +106,7 @@ class User():
             self.cleanup_RE()
         motor.mv(currPos)
 
-    def list3scan(self, m1, p1, m2, p2, m3, p3, nEvents, record=None, use_l3t=False):
-        self.cleanup_RE()
-        currPos1 = m1.wm()
-        currPos2 = m2.wm()
-        currPos3 = m3.wm()
-        daq.configure(nEvents, record=record, controls=[m1,m2,m3], use_l3t=use_l3t)
-        try:
-            RE(list_scan([daq], m1,p1,m2,p2,m3,p3))
-        except Exception:
-            logger.debug('RE Exit', exc_info=True)
-        finally:
-            self.cleanup_RE()
-        m1.mv(currPos1)
-        m2.mv(currPos2)
-        m3.mv(currPos3)
-
-    def dscan(self, motor, start, end, nsteps, nEvents, record=None, use_l3t=False):
+    def dscan(self, motor, start, end, nsteps, nEvents, record=True, use_l3t=False):
         self.cleanup_RE()
         daq.configure(nEvents, record=record, controls=[motor], use_l3t=use_l3t)
         currPos = motor.wm()
@@ -120,11 +138,11 @@ class User():
         finally:
             self.cleanup_RE()
 
-    def delay_scan(self, start, end, sweep_time, record=None, use_l3t=False,
+    def delay_scan(self, start, end, sweep_time, record=True, use_l3t=False,
                    duration=None):
         """Delay scan with the daq."""
         self.cleanup_RE()
-        daq.configure(events=None, duration=None, record=record,
+        daq.configure(events=None, duration=duration, record=record,
                       use_l3t=use_l3t, controls=[lxt_fast])
         try:
             RE(delay_scan(daq, lxt_fast, [start, end], sweep_time,
@@ -134,7 +152,7 @@ class User():
         finally:
             self.cleanup_RE()
 
-    def empty_delay_scan(self, start, end, sweep_time, record=None,
+    def empty_delay_scan(self, start, end, sweep_time, record=True,
                          use_l3t=False, duration=None):
         """Delay scan without the daq."""
         self.cleanup_RE()
@@ -157,4 +175,24 @@ class User():
             except Exception:
                 pass
 
+
+class MicroToNano():
+    def __init__(self):
+        self._offset_nano = 0
+
+    def setOffset_nano(self, offset):
+        self._offset_nano = offset
+
+    def setOffset_micro(self, offset):
+        self._offset_nano = offset * 1000
+
+    def getOffset_nano(self):
+        return self._offset_nano
+
+    def __call__(self, micro):
+        return (micro * 1000) + self._offset_nano
+
+
+#LXE is virtual motor easy to have linear power and talks to laser wave plate (newport) Friday
+#Saturday LXE_OPA
 

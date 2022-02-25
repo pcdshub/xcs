@@ -1,0 +1,11 @@
+R20_bothole:
+  active: true
+  history:
+    28 Jan 2022 00:54:00: '   91.6500'
+  value: 91.65
+bot_hole_shift2:
+  active: true
+  history:
+    28 Jan 2022 22:33:08: '   92.7500'
+    29 Jan 2022 05:04:57: '   93.7500'
+  value: 93.75

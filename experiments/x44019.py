@@ -33,13 +33,6 @@ logger = logging.getLogger(__name__)
 class User():
     def __init__(self):
         pass
-        with safe_load('x533_motors'):
-            self.th=IMS('STEP:XRT1:442:MOTR',name='th')
-            self.tth=IMS('STEP:XRT1:443:MOTR',name='tth')
-            self.xtal_y=IMS('STEP:XRT1:441:MOTR',name='xtal_y')
-            self.cam_dis=IMS('STEP:XRT1:444:MOTR',name='cam_dis')
-            self.cam_y=IMS('STEP:XRT1:447:MOTR',name='cam_y')
-            self.iris=IMS('STEP:XRT1:445:MOTR',name='irs')
     
 
     def takeRun(self, nEvents, record=None, use_l3t=False):
@@ -60,6 +53,18 @@ class User():
             self.cleanup_RE()
         motor.mv(currPos)
 
+    def pvascan(self, motor, start, end, nsteps, nEvents, record=None):
+        currPos = motor.get()
+        daq.configure(nEvents, record=record, controls=[motor])
+        RE(scan([daq], motor, start, end, nsteps))
+        motor.put(currPos)
+
+    def pvdscan(self, motor, start, end, nsteps, nEvents, record=None):
+        daq.configure(nEvents, record=record, controls=[motor])
+        currPos = motor.get()
+        RE(scan([daq], motor, currPos + start, currPos + end, nsteps))
+        motor.put(currPos)
+    
     def listscan(self, motor, posList, nEvents, record=None, use_l3t=False):
         self.cleanup_RE()
         currPos = motor.wm()
@@ -156,5 +161,3 @@ class User():
                 RE.stop()
             except Exception:
                 pass
-
-

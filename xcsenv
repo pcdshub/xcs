@@ -3,7 +3,8 @@
 
 # edit these lines only
 USE_LOCAL="1"
-export CONDA_ENVNAME="pcds-5.1.1"
+#export CONDA_ENVNAME="pcds-5.1.1"
+export CONDA_ENVNAME="pcds-5.2.1"
 
 export HUTCH="xcs"
 export LOCAL_BASE="/u1/xcsopr/conda_envs"
