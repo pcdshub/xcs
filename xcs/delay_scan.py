@@ -10,7 +10,8 @@ from scipy.constants import speed_of_light
 from pcdsdaq.preprocessors import daq_during_wrapper
 from pcdsdevices.interface import BaseInterface
 
-def delay_scan(daq, time_motor, time_points, sweep_time, duration=None):
+def delay_scan(daq, time_motor, time_points, sweep_time, duration=None, 
+               record=None, use_l3t=False, controls=None):
     """
     Bluesky plan that sets up and executes the delay scan.
 
@@ -28,8 +29,18 @@ def delay_scan(daq, time_motor, time_points, sweep_time, duration=None):
     sweep_time: float
         The duration we take to move from one end of the range to the other.
 
-    duration: float
+    record: bool, optional
+        Whether or not to record in the daq
+
+    duration: float, optional
         If provided, the time to run in seconds. If omitted, we'll run forever.
+
+    use_l3t: bool, optional
+        If True, events argument will be interpreted to only count events that
+        pass the level 3 trigger
+
+    controls: dict or list of devices, optional
+        If provided, values will make it to DAQ data stream as variables
     """
 
     spatial_pts = []
@@ -46,7 +57,8 @@ def delay_scan(daq, time_motor, time_points, sweep_time, duration=None):
     scan = infinite_scan([], time_motor, time_points, duration=duration)
 
     if daq is not None:
-        yield from daq_during_wrapper(scan)
+        yield from daq_during_wrapper(scan, record=record, use_l3t=use_l3t,
+                                      controls=controls)
     else:
         yield from scan
 
