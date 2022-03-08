@@ -28,7 +28,6 @@ from xcs.db import lxt_fast, lxt_fast_enc
 from pcdsdevices.device_types import Newport, IMS
 from pcdsdevices.evr import Trigger
 
-from nabs.plans import daq_delay_scan
 #from macros import *
 import time
 
@@ -143,7 +142,7 @@ class User():
 
     def delay_scan(self, start, end, sweep_time, record=True, use_l3t=False,
                    duration=None):
-        """Delay scan with the daq.  Uses nabs.plans.delay_scan"""
+        """Delay scan with the daq."""
         self.cleanup_RE()
         bec.disable_plots()
         controls = [lxt_fast]
