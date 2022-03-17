@@ -21,11 +21,13 @@ from pcdsdevices.areadetector import plugins
 from xcs.db import daq
 from xcs.db import camviewer
 from xcs.db import RE
+from xcs.db import bec
 from xcs.db import xcs_ccm as ccm
 from xcs.delay_scan import delay_scan
 from xcs.db import lxt_fast, lxt_fast_enc
 from pcdsdevices.device_types import Newport, IMS
 from pcdsdevices.evr import Trigger
+
 #from macros import *
 import time
 
@@ -142,15 +144,17 @@ class User():
                    duration=None):
         """Delay scan with the daq."""
         self.cleanup_RE()
-        daq.configure(events=None, duration=duration, record=record,
-                      use_l3t=use_l3t, controls=[lxt_fast])
+        bec.disable_plots()
+        controls = [lxt_fast]
         try:
             RE(delay_scan(daq, lxt_fast, [start, end], sweep_time,
-                          duration=duration))
+                          duration=duration, record=record, use_l3t=use_l3t,
+                          controls=controls))
         except Exception:
             logger.debug('RE Exit', exc_info=True)
         finally:
             self.cleanup_RE()
+            bec.enable_plots()
 
     def empty_delay_scan(self, start, end, sweep_time, record=True,
                          use_l3t=False, duration=None):
