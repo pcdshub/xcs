@@ -1,0 +1,14 @@
+# default group
+* @pcdshub/xcs-members
+
+# language-specific group(s)
+## PYTHON files
+*.py @pcdshub/python-reviewers @pcdshub/xcs-members
+*.pyi @pcdshub/python-reviewers @pcdshub/xcs-members
+*.pyc @pcdshub/python-reviewers @pcdshub/xcs-members
+*.pyw @pcdshub/python-reviewers @pcdshub/xcs-members
+*.pyx @pcdshub/python-reviewers @pcdshub/xcs-members
+*.pyd @pcdshub/python-reviewers @pcdshub/xcs-members
+
+# github folder holds administrative files
+.github/** @pcdshub/software-admin
