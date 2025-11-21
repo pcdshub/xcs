@@ -1,0 +1,1093 @@
+
+
+from subprocess import check_output
+
+import logging
+import json
+import sys
+import time
+import os
+
+import numpy as np
+import elog
+from hutch_python.utils import safe_load
+from ophyd import EpicsSignalRO
+from ophyd import EpicsSignal
+from bluesky import RunEngine
+from bluesky.plans import scan
+from bluesky.plans import list_scan
+from ophyd import Component as Cpt
+from ophyd import Device
+from pcdsdevices.interface import BaseInterface
+from pcdsdevices.areadetector import plugins
+from xcs.db import daq
+from xcs.db import camviewer
+from xcs.db import RE
+#from xcs.db import bec
+from xcs.db import xcs_ccm as ccm
+from xcs.delay_scan import delay_scan
+from xcs.db import lxt_fast, lxt_fast_enc
+from pcdsdevices.device_types import Newport, IMS
+from pcdsdevices.evr import Trigger
+from epics import caget 
+
+#from macros import *
+import time
+
+logger = logging.getLogger(__name__)
+
+#from xpp.db import daq, seq, elog
+#from ophyd.status import wait as status_wait
+from pcdsdevices.evr import Trigger
+#from xpp.db import cp
+#from xpp.db import lp
+#from xpp.db import xpp_pulsepicker as pp
+#from xpp.db import xpp_ccm as ccm
+#from pcdsdevices.device_types import Newport, IMS
+# WAIT A WHILE FOR THE DAQ TO START
+#import pcdsdaq.daq
+#pcdsdaq.daq.BEGIN_TIMEOUT = 5
+
+
+class User:
+    """Generic User Object"""
+    with safe_load('Dummy'):
+        print('Import dummy')
+
+    def __init__(self):
+
+        with safe_load ('LED'):
+            self.led = Trigger('XCS:R42:EVR:01:TRIG6', name='led_delay')
+            self.led_uS = MicroToNano()
+
+        with safe_load('Von Hamos Beckhoff'):
+            from ophyd.device import Device, Component as Cpt
+            from pcdsdevices.epics_motor import BeckhoffAxis                                                 
+            class VonHamos_Spec(Device):                                                                     
+                cr1_tilt = Cpt(BeckhoffAxis, ':10', name='cr1_tilt')                                         
+                cr2_tilt = Cpt(BeckhoffAxis, ':11', name='cr2_tilt')                                         
+                cr3_tilt = Cpt(BeckhoffAxis, ':12', name='cr3_tilt')
+                cr4_tilt = Cpt(BeckhoffAxis, ':13', name='cr4_tilt')
+                cr1_move = Cpt(BeckhoffAxis, ':02', name='cr1_move')
+                cr2_move = Cpt(BeckhoffAxis, ':03', name='cr2_move')
+                cr3_move = Cpt(BeckhoffAxis, ':04', name='cr3_move')                                         
+                cr4_move = Cpt(BeckhoffAxis, ':05', name='cr4_move')                                         
+                cr1_rot = Cpt(BeckhoffAxis, ':06', name='cr1_rot')                                           
+                cr2_rot = Cpt(BeckhoffAxis, ':07', name='cr2_rot')                                           
+                cr3_rot = Cpt(BeckhoffAxis, ':08', name='cr3_rot')                                           
+                cr4_rot = Cpt(BeckhoffAxis, ':09', name='cr4_rot')                                           
+                com_rot = Cpt(BeckhoffAxis, ':01', name='com_rot')
+            self.vhs = VonHamos_Spec('MFX:VHS:MMB', name='vhs')
+
+    def set_current_position(self, motor, value):
+        motor.set_use_switch.put(1)
+        motor.set_use_switch.wait_for_connection()
+        motor.user_setpoint.put(value, force=True)
+        motor.user_setpoint.wait_for_connection()
+        motor.set_use_switch.put(0)
+
+    def led_scan(self, start, end, nsteps, duration):
+        """
+        Function to scan led delays and dwell at each delay. Goes back to original delay after scanning.
+
+        Parameters
+        ---------
+        start : float
+            Start delay in microseconds.
+        end : float
+            End delay in microseconds.
+        nsteps : integer
+            number of steps for delay.
+        duration : float
+            Dwell time at each delay. In seconds.
+        """
+        old_led = self.led.ns_delay.get()
+        print('Scanning LED delays...')
+        steps = np.linspace(start * 1000.0, end * 1000.0, nsteps)
+        for step in steps:
+            self.led.ns_delay.put(step)
+            time.sleep(duration)
+        self.led.ns_delay.put(old_led)
+        print('Scan complete setting delay back to old value: ' +str(old_led))
+
+    def lxt_fast_set_absolute_zero(self):
+        currentpos = lxt_fast()
+        currentenc = lxt_fast_enc.get()
+        #elog.post('Set current stage position {}, encoder value {} to 0'.format(currentpos,currentenc.pos))
+        print('Set current stage position {}, encoder value {} to 0'.format(currentpos,currentenc.pos))
+        lxt_fast.set_current_position(0)
+        lxt_fast_enc.set_zero()
+        return
+
+    def takeRun(self, nEvents=None, duration=None, record=True, use_l3t=False):
+        daq.configure(events=120, record=record, use_l3t=use_l3t)
+        daq.begin(events=nEvents, duration=duration)
+        daq.wait()
+        daq.end_run()
+
+    def pvascan(self, motor, start, end, nsteps, nEvents, record=None):
+        currPos = motor.get()
+        daq.configure(nEvents, record=record, controls=[motor])
+        RE(scan([daq], motor, start, end, nsteps))
+        motor.put(currPos)
+
+    def pvdscan(self, motor, start, end, nsteps, nEvents, record=None):
+        daq.configure(nEvents, record=record, controls=[motor])
+        currPos = motor.get()
+        RE(scan([daq], motor, currPos + start, currPos + end, nsteps))
+        motor.put(currPos)
+
+    #def ascan(self, motor, start, end, nsteps, nEvents, record=True, use_l3t=False):
+    #    self.cleanup_RE()
+    #    currPos = motor.wm()
+    #    daq.configure(nEvents, record=record, controls=[motor], use_l3t=use_l3t)
+    #    try:
+    #        RE(scan([daq], motor, start, end, nsteps))
+    #    except Exception:
+    #        logger.debug('RE Exit', exc_info=True)
+    #    finally:
+    #        self.cleanup_RE()
+    #    motor.mv(currPos)
+
+    def listscan(self, motor, posList, nEvents, record=True, use_l3t=False):
+        self.cleanup_RE()
+        currPos = motor.wm()
+        daq.configure(nEvents, record=record, controls=[motor], use_l3t=use_l3t)
+        try:
+            RE(list_scan([daq], motor, posList))
+        except Exception:
+            logger.debug('RE Exit', exc_info=True)
+        finally:
+            self.cleanup_RE()
+        motor.mv(currPos)
+    """
+    #labmax=EpicsSignal('XCS:LPW:01:DATA_PRI')    
+    #import databroker
+    #from databroker import temp
+    def knife_edge(self,det,motor,start,stop,steps,n,guess): #n=#of measurements at each step
+        from databroker import Broker
+        import numpy as np
+        from scipy.optimize import minimize
+        import matplotlib.pyplot as plt
+
+        print("Doing knife edge laser scan on motor:", motor)
+        ljh_jet_x=EpicsSignal('XCS:LJH:JET:X')
+        labmax=EpicsSignal('XCS:LPW:01:DATA_PRI')
+
+        #RE(scan([labmax], motor, start, stop, steps)) #, per_step=num_measurements)
+        positions = np.repeat(np.linspace(start,stop,steps),n)
+        print("positions",positions)
+        
+        def labmax_range_scan(detector, motor, positions):
+            for pos in positions:
+                # Move motor to the next position
+                yield from abs_set(ljh_jet_x, pos, wait=True)
+        
+                # Trigger the detector and read its value
+                yield from trigger_and_read([detector])
+                det_value = detector.value.get()
+        
+                # Apply conditional logic based on detector value using epics.caput
+                if det_value < 3e-06:
+                    # Set detector to setting A using caput (e.g., change some configuration)
+                    epics.caput('XCS:LPW:01:SETRANGE', 3e-06)  
+                else if det_value > 3e-06:
+                    # Set detector to setting B using caput (e.g., change some configuration)
+                    epics.caput('XCS:LPW:01:SETRANGE', 3e-05)  
+        
+                    # Read the detector again after setting change
+                    yield from trigger_and_read([detector])
+
+    
+        db = Broker.named('temp')
+        RE.subscribe(db.insert)
+        uid,=RE(labmax_range_scan([labmax], motor, positions)) #motor
+        header = db[-1]
+        t = header.table()
+        
+        print('ljh_jet_x',t['ljh_jet_x'])
+        print('det',t['XCS:LPW:01:DATA_PRI'])
+        
+
+        def cauchy_loss(params, x, y, c):
+            A, mu, sigma = params
+            y_pred = A * np.exp(-(x - mu)**2 / (2 * sigma**2))
+            residual = y - y_pred
+            return np.log(1 + (residual / c)**2).sum()
+        
+        # Function to define the Gaussian function for curve fitting
+        def gauss(params, x):
+            A, mu, sigma = params
+            return A * np.exp(-(x - mu)**2 / (2 * sigma**2))
+
+        # Objective function for optimization
+        def objective(params, x, y, c):
+            return cauchy_loss(params, x, y, c)
+        
+        # Initial guess for parameters
+        initial_guess = [0.01, np.mean(t['ljh_jet_x']), 0.001*guess]
+
+        print("initial guess", initial_guess)
+
+        power = header.data('XCS:LPW:01:DATA_PRI')
+        position = header.data('ljh_jet_x')
+        
+
+        # Perform optimization
+        #result = minimize(objective, initial_guess, args=(power_arr, pos_arr, 1))
+        result = minimize(objective, initial_guess, args=(t['ljh_jet_x'], t['XCS:LPW:01:DATA_PRI'], 1))
+
+        # Extract optimized parameters
+        popt = result.x
+        #print("popt", popt)
+        
+        # Calculating the full width at half maximum (FWHM)
+        FWHM = 2 * np.sqrt(2 * np.log(2)) * popt[2]
+        print("The FWHM is:", FWHM*1000, "um")
+
+        # Plotting the data and the fit
+        fig2 = plt.figure("Knife Edge Scan")
+        plt.plot(t['ljh_jet_x'], t['XCS:LPW:01:DATA_PRI'], 'b.', label='Measurement Data')
+        plt.plot(t['ljh_jet_x'], gauss(popt, t['ljh_jet_x']), 'r-', label='Gaussian Fit')
+        plt.xlabel('Position [mm]')
+        plt.ylabel('Intensity [J]')
+        plt.title('Edge Profile with Gaussian Fit (robust, Cauchy loss)')
+        plt.legend()
+        plt.show()
+    """
+
+    #def dscan(self, motor, start, end, nsteps, nEvents, record=True, use_l3t=False):
+    #    self.cleanup_RE()
+    #    daq.configure(nEvents, record=record, controls=[motor], use_l3t=use_l3t)
+    #    currPos = motor.wm()
+    #    try:
+    #        RE(scan([daq], motor, currPos+start, currPos+end, nsteps))
+    #    except Exception:
+    #        logger.debug('RE Exit', exc_info=True)
+    #    finally:
+    #        self.cleanup_RE()
+    #    motor.mv(currPos)
+
+    #def a2scan(self, m1, a1, b1, m2, a2, b2, nsteps, nEvents, record=True, use_l3t=False):
+    #    self.cleanup_RE()
+    #    daq.configure(nEvents, record=record, controls=[m1, m2], use_l3t=use_l3t)
+    #    try:
+    #        RE(scan([daq], m1, a1, b1, m2, a2, b2, nsteps))
+    #    except Exception:
+    #        logger.debug('RE Exit', exc_info=True)
+    #    finally:
+    #        self.cleanup_RE()
+
+    #def a3scan(self, m1, a1, b1, m2, a2, b2, m3, a3, b3, nsteps, nEvents, record=True):
+    #    self.cleanup_RE()
+    #    daq.configure(nEvents, record=record, controls=[m1, m2, m3])
+    #    try:
+    #        RE(scan([daq], m1, a1, b1, m2, a2, b2, m3, a3, b3, nsteps))
+    #    except Exception:
+    #        logger.debug('RE Exit', exc_info=True)
+    #    finally:
+    #        self.cleanup_RE()
+
+    #def delay_scan(self, start, end, sweep_time, record=True, use_l3t=False,
+    #               duration=None):
+    #    """Delay scan with the daq."""
+    #    self.cleanup_RE()
+    #    bec.disable_plots()
+    #    controls = [lxt_fast]
+    #    try:
+    #        RE(delay_scan(daq, lxt_fast, [start, end], sweep_time,
+    #                      duration=duration, record=record, use_l3t=use_l3t,
+    #                      controls=controls))
+    #    except Exception:
+    #        logger.debug('RE Exit', exc_info=True)
+    #    finally:
+    #        self.cleanup_RE()
+    #        bec.enable_plots()
+
+    #def empty_delay_scan(self, start, end, sweep_time, record=True,
+    #                     use_l3t=False, duration=None):
+    #    """Delay scan without the daq."""
+    #    self.cleanup_RE()
+    #    #daq.configure(events=None, duration=None, record=record,
+    #    #              use_l3t=use_l3t, controls=[lxt_fast])
+    #    try:
+    #        RE(delay_scan(None, lxt_fast, [start, end], sweep_time,
+    #                      duration=duration))
+    #    except Exception:
+    #        logger.debug('RE Exit', exc_info=True)
+    #    finally:
+    #        self.cleanup_RE()
+
+    def cleanup_RE(self):
+        if not RE.state.is_idle:
+            print('Cleaning up RunEngine')
+            print('Stopping previous run')
+            try:
+                RE.stop()
+            except Exception:
+                pass
+
+    def scanExamples(self):
+        print("""
+        Absolute Scan
+          re.daq_ascan([], sim.fast_motor1, -1, 1, 21, events = 10, record = False)
+
+        Absolute 2D Scan
+          re.daq_a2scan([], sim.fast_motor1, -1, 1 , sim.fast_motor2, -1, 1, nsteps = 5, events = 10, record = False)
+
+        Absolute 3D Scan
+          re.daq_a3scan([], sim.fast_motor1, -1, 1 , sim.fast_motor2, -1, 1, sim.fast_motor3, -1, 1, nsteps = 5, events = 10, record = False)
+
+        Delta Scan
+          re.daq_dscan([], sim.fast_motor1, -1, 1, 21, events = 10, record = False)
+
+        Delay Scan
+          re.daq_delay_scan([], lxt_fast, [-1e-12, 1e-12], sweep_time = 5,  duration = 20, record = False)
+
+        Empty Delay Scan (no Daq)
+          re.delay_scan([], lxt_fast, [-1e-12,1e-12], sweep_time = 5,  duration = 20)
+        """)
+
+
+    ##########################
+    # CCM Scanning Functions #
+    ##########################
+    def perform_run(self, events, record=True, comment='', post=True,
+                    **kwargs):
+        """
+        Perform a single run of the experiment
+
+        Parameters
+        ----------
+        events: int
+            Number of events to include in run
+
+        record: bool, optional
+            Whether to record the run
+
+        comment : str, optional
+            Comment for ELog
+
+        post: bool, optional
+            Whether to post to the experimental ELog or not. Will not post if
+            not recording
+
+        Note
+        ----
+        """
+
+        comment = comment or ''
+        # Start recording
+        logger.info("Starting DAQ run, -> record=%s", record)
+        daq.begin(events=events, record=record)
+        time.sleep(1)
+        # Post to ELog if desired
+        runnum = daq._control.runnumber()
+        info = [runnum, comment, events, self._delaystr]
+        post_msg = post_template.format(*info)
+        print(post_msg)
+        if post and record:
+            elog(msg=post_msg, run=runnum)
+
+        # Wait for the DAQ to finish
+        logger.info("Waiting or DAQ to complete %s events ...", events)
+        daq.wait()
+        logger.info("Run complete!")
+        daq.end_run()
+        time.sleep(0.5)
+        return
+
+
+    def continuous_ccmscan(self,energies, pointTime=1, move_vernier=True, bidirectional=False, kill=True, beam_check = False):
+        #Set to go up and down once.
+        initial_energy=ccm.E_Vernier.position
+        try:
+            for E in energies:
+                if beam_check:
+                    while caget('XCS:SB1:BMMON:SUM')< 100:
+                        time.sleep(1.0)
+                        print('beam down. Scan paused.')
+                if move_vernier:
+                    ccm.E_Vernier.move(E, kill=kill)
+                    print(f'Moving ccm.E_Vernier to {E}')
+                else:
+                    ccm.E.move(E, kill=kill)
+                    print(f'Moving ccm.E to {E}')
+                time.sleep(pointTime)
+            if bidirectional:
+                for E in energies[::-1]:
+                    if beam_check:
+                        while caget('XCS:SB1:BMMON:SUM')< 100:
+                            time.sleep(1.0)
+                            print('beam down. Scan paused.')
+                    if move_vernier:
+                        ccm.E_Vernier.move(E, kill=kill)
+                        print(f'Moving ccm.E_Vernier to {E}')
+                    else:
+                        ccm.E.move(E, kill=kill)
+                        print(f'Moving ccm.E to {E}')
+                    time.sleep(pointTime)
+        except KeyboardInterrupt:
+                print(f'Scan end signal received. Returning ccm to energy before scan: {initial_energy}')
+                ccm.E_Vernier.move(initial_energy, kill=False)
+                print(f'Moving ccm.E_Vernier to {initial_energy}')
+        finally:
+            if move_vernier:
+                ccm.E_Vernier.move(initial_energy, kill=kill)
+                print(f'Moving ccm.E_Vernier to {E}')
+            else:
+                ccm.E.move(initial_energy, kill=kill)
+                print(f'Moving ccm.E to {E}')
+            time.sleep(pointTime)
+
+
+    def perform_run_with_escan(self, energies, record=True, comment='', pointTime=1,
+                                 post=True, move_vernier=True,bidirectional=False, beam_check=False,
+                    **kwargs):
+        """
+        Perform a single run of the experiment
+
+        Parameters
+        ----------
+        energies: List[float] a list of energies to scan over
+
+        record: bool, optional
+            Whether to record the run
+
+        comment : str, optional
+            Comment for ELog
+
+        pointTime : int, optional
+            how long in seconds to wait at a given energy before moving
+
+        post: bool, optional
+            Whether to post to the experimental ELog or not. Will not post if
+            not recording
+
+        move_vernier: bool, optional
+            Whether or not to move the vernier while scanning the channel cut mono.
+        
+        beam_check: bool, optional, default False
+            Whether to check for ipm4 counts before moving to the next step of the ccm scan. Pauses if the beam drops.
+        
+        Note
+        ----
+        """
+
+        # Create descriptive message
+        comment = comment or ''
+        logger.info("Starting DAQ run, -> record=%s", record)
+        #daq.disconnect()
+        daq.configure()
+        try:
+            #start DAQ, then start scanning
+            daq.begin_infinite(record=record) #note we do not specify # of events, so it records until we stop
+            # Post to ELog if desired
+            runnum = daq._control.runnumber()
+            #info = [runnum, comment, self._delaystr, min(energies), max(energies)]
+            #post_msg = post_template_escan.format(*info)
+            time.sleep(1) # give DAQ a second
+           #print(post_msg)
+           # if post and record:
+           #     elog.post(msg=post_msg, run=runnum)
+            #now start scanning
+            self.continuous_ccmscan(energies, pointTime=pointTime, move_vernier=move_vernier,bidirectional=bidirectional,beam_check=beam_check)
+        except KeyboardInterrupt:
+            print('Interrupt signal received. Stopping run and DAQ')
+        finally: 
+            daq.end_run()
+            logger.info("Run complete!")
+            #daq.disconnect()
+        
+#    def perform_run_with_escan_test(self, energies, record=True, comment='', pointTime=1,
+#                                 post=True, move_vernier=True,bidirectional=False,
+#                    **kwargs):
+#
+#        # Create descriptive message
+#        comment = comment or ''
+#        logger.info("Starting DAQ run, -> record=%s", record)
+#        #daq.disconnect()
+#        daq.configure()
+#        try:
+#            #start DAQ, then start scanning
+#            daq.begin(record=record) #note we do not specify # of events, so it records until we stop
+#            # Post to ELog if desired
+#            runnum = daq._control.runnumber()
+#            #info = [runnum, comment, self._delaystr, min(energies), max(energies)]
+#            #post_msg = post_template_escan.format(*info)
+#            time.sleep(1) # give DAQ a second
+#           #print(post_msg)
+#           # if post and record:
+#           #     elog.post(msg=post_msg, run=runnum)
+#            #now start scanning
+#            self.continuous_ccmscan(energies, pointTime=pointTime, move_vernier=move_vernier,bidirectional=bidirectional)
+#        except KeyboardInterrupt:
+#            print('Interrupt signal received. Stopping run and DAQ')
+#        finally: 
+#            daq.end_run()
+#            logger.info("Run complete!")
+#            #daq.disconnect()        
+
+    def loop(self, delays=[], nruns=1, light_events=3000, 
+             dark_events=None, record=True, comment='', post=True):
+        """
+        Loop through a number of delays a number of times while running the DAQ
+        Parameters
+        ----------
+        delays: list, optional
+            Requested laser delays in nanoseconds
+            close fs_shutter if False or None, 
+            i.e., delays=[None, 1000, 1e6, 1e7] loop through:
+            - close opo shutter
+            - 1 us delay
+            - 1 ms delay
+            - 10 ms delay
+
+        nruns: int, optional
+            Number of iterations to run requested delays
+
+        light_events: int, optional
+            Number of events to sample with requested laser pulses
+        dark_events: int, optional
+           Number of events to sample with all lasers shuttered
+        record: bool, optional
+           Choice to record or not
+        comment: str, optional
+           Comment for ELog
+        post : bool, optional
+           Whether to post to ELog or not. Will not post if not recording.
+        """
+        
+        # Accept a single int or float
+        if isinstance(delays, (float, int)):
+            delays = [delays]
+        
+        # Preserve the original state of DAQ
+        logger.info("Running delays %r, %s times ...", delays, nruns)
+        delays = delays or [False]
+        try:
+            for irun in range(nruns):
+                run = irun+1
+                logger.info("Beginning run %s of %s", run, nruns)
+                for delay in delays:
+                    if light_events:
+                        # Perform the light run
+                        self.perform_run(light_events,
+                                         record=record,
+                                         post=post, comment=comment)
+
+                    # Perform the dark run
+                    if dark_events:
+                        self.perform_run(events=dark_events, record=record,
+                                         post=post, comment=comment)
+            logger.info("All requested scans completed!")
+        except KeyboardInterrupt:
+            logger.warning("Scan interrupted by user request!")
+            logger.info("Stopping DAQ ...")
+            daq.stop()
+        
+        # Return the DAQ to the original state
+        finally:
+            logger.info("Disconnecting from DAQ ...")
+            daq.disconnect()
+        return
+
+
+    def loop_escan(self, energies, delays=[], nruns=1, record=True, comment='', 
+                   post=True, pointTime=1, move_vernier=True):
+        """
+        Loop through a number of delays a number of times while running the DAQ
+        Parameters
+        ----------
+        delays: list, optional
+            Requested laser delays in nanoseconds
+            close fs_shutter if False or None, 
+            i.e., delays=[None, 1000, 1e6, 1e7] loop through:
+            - 1 us delay
+            - 1 ms delay
+            - 10 ms delay
+
+        nruns: int, optional
+            Number of iterations to run requested delays
+
+        record: bool, optional
+            Whether to record the run or not
+        comment: str, optional
+           Comment for ELog
+        post : bool, optional
+           Whether to post to ELog or not. Will not post if not recording.
+        pointTime: positive Number, optional
+           time in seconds to dwell at a given energy before moving
+        move_vernier: bool, optional
+            whether to have vernier track CCM motion or not
+        """
+        
+        # Accept a single int or float
+        if isinstance(delays, (float, int)):
+            delays = [delays]
+        
+        # Preserve the original state of DAQ
+        logger.info("Running delays %r, %s times ...", delays, nruns)
+        delays = delays or [False]
+        try:
+            for irun in range(nruns):
+                run = irun+1
+                logger.info("Beginning run %s of %s", run, nruns)
+                for delay in delays:
+
+                    # Perform the run
+                    self.perform_run_with_escan(energies,
+                                 record=record,
+                                 post=post,
+                                 comment=comment,
+                                 pointTime=pointTime,
+                                 move_vernier=move_vernier)
+            logger.info("All requested scans completed!")
+        except KeyboardInterrupt:
+            logger.warning("Scan interrupted by user request!")
+            logger.info("Stopping DAQ ...")
+            daq.stop()
+        
+        # Return the DAQ to the original state
+        finally:
+            logger.info("Disconnecting from DAQ ...")
+            daq.disconnect()
+        return
+
+
+    def dummy_daq_test(self, events=360, sleep=3, record=False):
+        daq.connect()
+        while 1:
+            daq.begin(events=events, record=record)
+            daq.wait()
+            daq.end_run()
+            time.sleep(sleep)
+            print(time.ctime(time.time()))
+        return
+
+
+    def ccm_many(self, elist, pointTime=1, nRepeat=10, kill=True):
+        for ii in range(nRepeat):
+            print(f'Start scan {ii}')
+            self.continuous_ccmscan(elist, pointTime=pointTime, kill=kill)
+        return
+
+    
+
+post_template = """\
+Run Number: {} {}
+
+Acquiring {} events
+
+{}
+"""
+
+
+post_template_escan = """\
+Run Number: {} {}
+
+{}
+Minimum photon_energy -> {}
+Maximum photon_energy -> {}
+"""
+
+
+
+
+class Vernier:
+    def __init__(self):
+        pass
+
+
+    def scan(
+            self,
+            energy_scan_start_eV: float,
+            energy_scan_end_eV: float,
+            energy_scan_steps: int,
+            events_per_step: int = 120,
+            sample: str = '?',
+            tag: str = None,
+            picker: str = None,
+            inspire: bool = False,
+            record: bool = False,
+            mcc_pv: str = 'XCS:USER:MCC:EPHOT:SET1'):
+        """Perform Vernier scan.
+
+        Parameters:
+            energy_scan_start_eV (float): 
+                Photon energy (in eV) to start the scan at.
+
+            energy_scan_end_eV (float): 
+                Photon energy (in eV) to end the scan at.
+
+            energy_scan_steps (int): 
+                Number of steps in scan.
+
+            events_per_step (int): 
+                Number of events per step. Optional. Default: 120.
+
+            sample: str, optional
+                Sample Name
+
+            tag: str, optional
+                Run group tag
+
+            picker: str, optional
+                If 'open' it opens pp before run starts. If 'flip' it flipflops before run starts
+
+            inspire: bool, optional
+                Set false by default because it makes Sandra sad. Set True to inspire
+
+            record (bool): 
+                whether to record the scan or not. Optional. Default: False.
+
+            mcc_pv (str): 
+                Vernier PV. Optional. Default: 'MFX:USER:MCC:EPHOT:SET1'.
+        
+
+        """
+        from ophyd import EpicsSignal
+        import logging
+        logger = logging.getLogger(__name__)
+        try:
+            from mfx.db import RE, pp, daq
+            from mfx.autorun import quote, post
+            from mfx.macros import get_exp
+        except ImportError:
+            from bluesky import RunEngine
+            RE = RunEngine({})
+        from nabs.plans import daq_scan
+
+        if picker=='open':
+            pp.open()
+        if picker=='flip':
+            pp.flipflop()
+
+        if tag is None:
+            tag = sample
+
+        logger.info(f"Run Number {daq.run_number() + 1} Running {sample}......{quote()['quote']}")
+        run_number = daq.run_number() + 1
+        RE(
+            daq_scan(
+                [],
+                EpicsSignal(mcc_pv, name='mcc'),
+                energy_scan_start_eV,
+                energy_scan_end_eV,
+                energy_scan_steps,
+                events=events_per_step,
+                record=record))
+        pp.close()
+        daq.disconnect()
+        post(sample, tag, run_number, record, inspire)
+        logger.warning('Finished with all runs thank you for choosing the MFX beamline!\n')
+
+        logging.warning(f"Scan completed. Would you like to analyze the output?")
+        answer = input("(y/n)? ")
+
+        if answer.lower() == "y":
+            facility = input("Enter facility (s3df or nersc) to continue: ")
+            user = input("Enter username to continue: ")
+            exp = str(get_exp())
+            self.output.scan(
+                user=user, 
+                facility=facility, 
+                run_type='scan', 
+                exp=exp, 
+                run=run_number)
+
+
+    def series(
+            self,
+            energy_scan_start_eV: float,
+            energy_scan_end_eV: float,
+            energy_scan_steps: int,
+            run_length: int = 10,
+            tag: str = None,
+            picker: str = None,
+            inspire: bool = False,
+            daq_delay: int = 5,
+            record: bool = False):
+        """Perform Vernier scan.
+
+        Parameters:
+            energy_scan_start_eV (float): 
+                Photon energy (in eV) to start the scan at.
+
+            energy_scan_end_eV (float): 
+                Photon energy (in eV) to end the scan at.
+
+            energy_scan_steps (int): 
+                Step Size (in eV).
+
+            run_length: int, optional
+                number of seconds for run 300 is default
+
+            tag: str, optional
+                Run group tag/sample name
+
+            picker: str, optional
+                If 'open' it opens pp before run starts. If 'flip' it flipflops before run starts
+
+            inspire: bool, optional
+                Set false by default because it makes Sandra sad. Set True to inspire
+
+            daq_delay: int, optional
+                delay time between runs. Default is 5 second but increase is the DAQ is being slow.
+
+            record (bool): 
+                whether to record the scan or not. Optional. Default: False.
+        """
+        import os
+        import logging
+        from xcs.db import pp, daq
+        from xcs.autorun import quote, autorun
+        from xcs.macros import get_exp
+        from time import sleep
+        logger = logging.getLogger(__name__)
+
+        if picker=='open':
+            pp.open()
+        if picker=='flip':
+            pp.flipflop()
+
+        run_number = daq.run_number() + 1
+
+        energies = list(range(energy_scan_start_eV, energy_scan_end_eV + energy_scan_steps, energy_scan_steps))
+        logger.info(energies)
+
+        original_ev = self.get.set1()
+
+        for ev in energies:
+            self.put.set1(ev)
+            sleep(2)
+            autorun(
+                sample=str(ev), 
+                tag=tag, 
+                run_length=run_length, 
+                record=record,
+                runs=1,
+                inspire=inspire, 
+                picker=picker,
+                close=False)
+            sleep(daq_delay)
+
+        logger.warning('Finished with all runs thank you for choosing the MFX beamline!\n')
+
+        logger.info(f'Moving energy back to original energy: {original_ev}')
+        self.put.set1(original_ev)
+
+        logging.warning(f"Series completed. Would you like to analyze the output?")
+        answer = input("(y/n)? ")
+
+        if answer.lower() == "y":
+            facility = input("Enter facility (s3df or nersc) to continue: ")
+            user = input("Enter username to continue: ")
+            exp = str(get_exp())
+            self.output.series(
+                user=user, 
+                facility=facility, 
+                run_type='series', 
+                exp=exp, 
+                run=run_number, 
+                energy=energy_scan_start_eV, 
+                step=energy_scan_steps, 
+                num=len(energies))
+
+
+    class output:
+        def __init__(self):
+            pass
+
+        def multi_run(
+                user: str,
+                exp: str = None,
+                run_list: list = [],
+                facility: str = "S3DF"):
+            """Perform Vernier scan results analysis.
+
+            Parameters:
+                user (str): username for computer account at facility.
+
+                exp (str): 
+                    experiment number. Current experiment by default
+
+                run_list (list): 
+                    List of run numbers. Last run number by default
+
+                facility (str): Default: "S3DF". Options: "S3DF, NERSC".
+            """
+            import logging
+            import os
+            from xcs.db import daq
+            from xcs.macros import get_exp
+            import mfx.cctbx
+            logger = logging.getLogger(__name__)
+
+            logging.info("Plotting XRT-Spec Output")
+            if exp is None:
+                exp = str(get_exp())
+
+            if len(run_list) == 0:
+                run_list = [daq.run_number()]
+
+            exp_run_list=[]
+
+            for run in run_list:
+                exp_run_list.append(f"{exp}:{run}")
+            exp_run_list = " ".join(exp_run_list)
+
+            facility = facility.upper()
+            if facility == 'NERSC':
+                logging.warning(f"Have you renewed your token with sshproxy today?")
+                token = input("(y/n)? ")
+
+                if token.lower() == "n":
+                    cctbx.sshproxy(user)
+
+            proc = [
+                f"ssh -Yt {user}@s3dflogin "
+                f"python /sdf/group/lcls/ds/tools/mfx/scripts/cctbx/fee_spec.py "
+                f"-e {exp} -f {facility} -r {exp_run_list}"
+                ]
+
+            logging.info(proc)
+            os.system(proc[0])
+
+
+        def series(
+                user: str,
+                facility: str = "S3DF",
+                run_type: str = 'series',
+                exp: str = None,
+                run: str = None,
+                energy: float = None,
+                step: float = None,
+                num: int = None):
+            """Perform Vernier scan results analysis.
+
+            Parameters:
+                facility (str):
+                    Default: "S3DF". Options: "S3DF, NERSC
+                type (str):
+                    specify whether it is a vernier 'scan' or 'series'
+                exp (str): 
+                    experiment number. Current experiment by default
+                run (str): 
+                    The run you'd like to process
+                energy (float):
+                    specify the starting energy in eV (only for 'series')
+                step (float):
+                    specify the energy step size in eV (only for 'series')
+                num (int):
+                    specify the total number of runs (only for 'series')
+            """
+            import logging
+            import os
+            from xcs.db import daq
+            from xcs.macros import get_exp
+            import mfx.cctbx
+            logger = logging.getLogger(__name__)
+
+            logging.info("Plotting XRT-Spec Output")
+            if exp is None:
+                exp = str(get_exp())
+
+            if run is None:
+                run = [daq.run_number()]
+
+            facility = facility.upper()
+            if facility == 'NERSC':
+                logging.warning(f"Have you renewed your token with sshproxy today?")
+                token = input("(y/n)? ")
+
+                if token.lower() == "n":
+                    cctbx.sshproxy(user)
+
+            proc = [
+                f"ssh -Yt {user}@s3dflogin "
+                f"python /sdf/group/lcls/ds/tools/mfx/scripts/cctbx/energy_calib_output.py "
+                f"-f {facility} -t {run_type} -e {exp} -r {run} -z {energy} -s {step} -n {num}"
+                ]
+
+            logging.info(proc)
+            os.system(proc[0])
+
+
+        def scan(
+                user: str,
+                facility: str = "S3DF",
+                run_type: str = 'scan',
+                exp: str = None,
+                run: str = None):
+            """Perform Vernier scan results analysis.
+
+            Parameters:
+                facility (str):
+                    Default: "S3DF". Options: "S3DF, NERSC
+                type (str):
+                    specify whether it is a vernier 'scan' or 'series'
+                exp (str): 
+                    experiment number. Current experiment by default
+                run (str): 
+                    The run you'd like to process
+            """
+            import logging
+            import os
+            from xcs.db import daq
+            from xcs.macros import get_exp
+            import mfx.cctbx
+            logger = logging.getLogger(__name__)
+
+            logging.info("Plotting XRT-Spec Output")
+            if exp is None:
+                exp = str(get_exp())
+
+            if run is None:
+                run = [daq.run_number()]
+
+            facility = facility.upper()
+            if facility == 'NERSC':
+                logging.warning(f"Have you renewed your token with sshproxy today?")
+                token = input("(y/n)? ")
+
+                if token.lower() == "n":
+                    cctbx.sshproxy(user)
+
+            proc = [
+                f"ssh -Yt {user}@s3dflogin "
+                f"python /sdf/group/lcls/ds/tools/mfx/scripts/cctbx/energy_calib_output.py "
+                f"-f {facility} -t {run_type} -e {exp} -r {run}"
+                ]
+
+            logging.info(proc)
+            os.system(proc[0])
+
+
+    class get:
+        def __init__(self):
+            pass
+
+        def ref():
+            import os
+            os.system(f'caget MFX:USER:MCC:EPHOT:REF1')
+            energy = int(os.popen("caget MFX:USER:MCC:EPHOT:REF1 | awk '{print $2}'").read().strip())
+            return energy
+
+        def set1():
+            import os
+            os.system(f'caget MFX:USER:MCC:EPHOT:SET1')
+            energy = int(os.popen("caget MFX:USER:MCC:EPHOT:SET1 | awk '{print $2}'").read().strip())
+            return energy
+
+    class put:
+        def __init__(self):
+            pass
+
+        def ref(energy):
+            import os
+            os.system(f'caput MFX:USER:MCC:EPHOT:REF1 {energy}')
+    
+        def set1(energy):
+            import os
+            os.system(f'caput MFX:USER:MCC:EPHOT:SET1 {energy}')
